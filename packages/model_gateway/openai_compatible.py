@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from packages.model_gateway.base import BaseModelClient
+from packages.model_gateway.base import BaseModelClient, ModelUsage
 
 
 class OpenAICompatibleClient(BaseModelClient):
@@ -19,6 +19,7 @@ class OpenAICompatibleClient(BaseModelClient):
         model: str | None = None,
         timeout_seconds: float = 60.0,
     ) -> None:
+        super().__init__()
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         self.base_url = (base_url or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1")).rstrip("/")
         self.model = model or os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
@@ -55,7 +56,9 @@ class OpenAICompatibleClient(BaseModelClient):
         async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
             response = await client.post(f"{self.base_url}/chat/completions", headers=headers, json=body)
             response.raise_for_status()
-            return response.json()
+            payload = response.json()
+            self.record_usage(_usage_from_payload(payload))
+            return payload
 
 
 def _extract_content(payload: dict[str, Any]) -> str:
@@ -79,3 +82,11 @@ def _strip_json_fences(content: str) -> str:
             lines = lines[:-1]
         return "\n".join(lines).strip()
     return stripped
+
+
+def _usage_from_payload(payload: dict[str, Any]) -> ModelUsage:
+    usage = payload.get("usage") or {}
+    return ModelUsage(
+        input_tokens=int(usage.get("prompt_tokens") or usage.get("input_tokens") or 0),
+        output_tokens=int(usage.get("completion_tokens") or usage.get("output_tokens") or 0),
+    )

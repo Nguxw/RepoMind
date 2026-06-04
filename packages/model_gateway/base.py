@@ -21,6 +21,19 @@ class BaseModelClient:
     provider: str = "base"
     model: str = "unknown"
 
+    def __init__(self) -> None:
+        self.usage_history: list[ModelUsage] = []
+
+    def record_usage(self, usage: ModelUsage) -> None:
+        self.usage_history.append(usage)
+
+    def usage_since(self, offset: int) -> ModelUsage:
+        usage = ModelUsage()
+        for item in self.usage_history[offset:]:
+            usage.input_tokens += item.input_tokens
+            usage.output_tokens += item.output_tokens
+        return usage
+
     async def generate_text(self, messages: list[dict[str, Any]]) -> str:
         raise NotImplementedError
 

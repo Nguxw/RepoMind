@@ -16,8 +16,11 @@ The MVP is deterministic by default through `MockModelClient`, so it runs withou
 - Validate source citations and expose source file content for citation panels.
 - Ask questions over Wiki pages, symbols, graph evidence, and source snippets.
 - Record trace data for Wiki generation and Ask runs.
-- Use a Next.js workbench with Wiki, Graph, Ask, Evidence, Monaco, and Mermaid panels.
-- Store import metadata locally under `data/metadata`.
+- Store import metadata locally or in PostgreSQL through a SQLAlchemy-backed store.
+- Record normalized rows for repositories, files, symbols, edges, wiki pages, wiki citations, agent runs, and tool calls.
+- Run Wiki generation through a task queue abstraction with inline and Redis/Arq modes.
+- Use in-memory vector retrieval by default, with a Qdrant adapter and Docker service available for later remote vector indexing.
+- Use a Next.js workbench with Wiki, React Flow Graph, Ask, Evidence, Monaco, Mermaid, and shadcn-style UI components.
 - Expose FastAPI APIs for import, profile, files, symbols, graph, Wiki, source, Ask, and trace access.
 
 ## Project Layout
@@ -33,7 +36,8 @@ packages/
   wiki_engine/                 Structured Wiki generation, citations, Mermaid
   retrieval/                   Wiki/symbol/source context packing
   harness/                     Lightweight AgentRuntime and trace state
-  storage/                     Local MVP metadata storage
+  storage/                     File and SQLAlchemy/PostgreSQL metadata storage
+  tasks/                       Inline and Redis/Arq queue adapters
 tests/                         Unit and API tests
 ```
 
@@ -82,6 +86,7 @@ Run a live LLM smoke test after setting model environment variables:
 ```bash
 python scripts/live_llm_smoke.py
 python scripts/live_api_smoke.py
+python scripts/tree_sitter_smoke.py
 ```
 
 Optional Tree-sitter parser support:
@@ -123,6 +128,9 @@ The app will be available at:
 ```text
 http://127.0.0.1:3000
 http://127.0.0.1:8000
+postgres://127.0.0.1:5432
+redis://127.0.0.1:6379
+http://127.0.0.1:6333
 ```
 
 Demo workflow:
@@ -142,6 +150,12 @@ Copy `.env.example` to `.env` when you want local overrides.
 REPOMIND_DATA_DIR=./data
 REPOMIND_MAX_FILE_BYTES=1048576
 REPOMIND_CLONE_TIMEOUT_SECONDS=120
+REPOMIND_STORAGE=file
+DATABASE_URL=postgresql+psycopg://repomind:repomind@postgres:5432/repomind
+REPOMIND_QUEUE_MODE=inline
+REDIS_URL=redis://redis:6379/0
+REPOMIND_VECTOR_STORE=memory
+QDRANT_URL=http://qdrant:6333
 
 MODEL_PROVIDER=mock
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
@@ -159,7 +173,7 @@ DEEPSEEK_MODEL=deepseek-chat
 
 ## Next Stages
 
-1. Add PostgreSQL persistence for repositories, files, symbols, graph edges, wiki pages, and traces.
-2. Add a background queue for long imports and Wiki generation.
-3. Replace deterministic Wiki sections with provider-backed generation while retaining citation validation.
-4. Add React Flow graph visualization and richer Mermaid validation.
+1. Move long-running import/wiki jobs fully to durable Redis/Arq background execution with polling-first UI.
+2. Enable remote Qdrant writes with production embeddings.
+3. Add richer Mermaid validation and graph layout controls.
+4. Add authentication and private repository import.

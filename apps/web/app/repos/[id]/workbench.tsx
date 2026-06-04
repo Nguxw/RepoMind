@@ -5,6 +5,11 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Activity, Bot, Braces, FileCode2, GitBranch, Loader2, Network, RefreshCcw, Search, Send } from "lucide-react";
+import ReactFlow, { Background, Controls, MiniMap, type Edge, type Node } from "reactflow";
+import "reactflow/dist/style.css";
+import { Badge } from "../../../components/ui/badge";
+import { Button } from "../../../components/ui/button";
+import { Card, CardContent } from "../../../components/ui/card";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
@@ -124,14 +129,15 @@ export default function RepoWorkbench({ repoId, initialTab }: { repoId: string; 
 
         <section className="grid gap-3 xl:grid-cols-[280px_minmax(0,1fr)_420px]">
           <aside className="panel min-h-[72vh] rounded-md p-3">
-            <button
+            <Button
               onClick={generateWiki}
-              className="focus-ring mb-3 inline-flex h-10 w-full items-center justify-center gap-2 border border-ink bg-citrus px-3 text-sm font-black"
+              className="mb-3 w-full"
+              variant="signal"
               disabled={loading}
             >
               {loading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
               Generate Wiki
-            </button>
+            </Button>
             <div className="space-y-2">
               {wiki.length ? wiki.map((page) => (
                 <button
@@ -229,12 +235,20 @@ function WikiPanel({ page, openCitation }: { page?: WikiPage; openCitation: (cit
 function GraphPanel({ graph }: { graph: any }) {
   const nodes = graph?.nodes ?? [];
   const edges = graph?.edges ?? [];
+  const flow = toFlow(nodes, edges);
   return (
     <div className="grid max-h-[72vh] gap-4 overflow-auto p-4">
       <div className="grid gap-3 md:grid-cols-3">
         <Metric label="Nodes" value={String(nodes.length)} />
         <Metric label="Edges" value={String(edges.length)} />
-        <Metric label="Imports" value={String(edges.filter((edge: any) => edge.type === "imports").length)} />
+        <Metric label="Calls" value={String(edges.filter((edge: any) => edge.type === "calls").length)} />
+      </div>
+      <div className="h-[460px] overflow-hidden border border-zincLine bg-white">
+        <ReactFlow nodes={flow.nodes} edges={flow.edges} fitView minZoom={0.2}>
+          <MiniMap pannable zoomable />
+          <Controls />
+          <Background />
+        </ReactFlow>
       </div>
       <div className="grid gap-3 lg:grid-cols-2">
         <ListBlock title="Nodes" items={nodes.slice(0, 80).map((node: any) => `${node.type}: ${node.name}`)} />
@@ -321,26 +335,28 @@ function MermaidBlock({ title, chart }: { title: string; chart: string }) {
 
 function TabButton({ active, onClick, icon, children }: { active: boolean; onClick: () => void; icon: ReactNode; children: ReactNode }) {
   return (
-    <button onClick={onClick} className={`focus-ring inline-flex h-10 items-center gap-2 border px-3 text-sm font-bold ${active ? "border-ink bg-ink text-paper" : "border-zincLine bg-white hover:border-ink"}`}>
+    <Button onClick={onClick} variant={active ? "default" : "outline"}>
       {icon}
       {children}
-    </button>
+    </Button>
   );
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="border border-zincLine bg-white p-4">
+    <Card className="bg-white shadow-none">
+      <CardContent>
       <div className="text-xs font-bold uppercase text-ink/50">{label}</div>
       <div className="mt-1 truncate text-lg font-black">{value}</div>
-    </div>
+      </CardContent>
+    </Card>
   );
 }
 
 function ListBlock({ title, items }: { title: string; items: string[] }) {
   return (
     <div className="border border-zincLine bg-white p-4">
-      <h3 className="mb-3 text-sm font-black uppercase text-ink/60">{title}</h3>
+      <h3 className="mb-3 flex items-center gap-2 text-sm font-black uppercase text-ink/60">{title} <Badge>{items.length}</Badge></h3>
       {items.length ? (
         <ul className="grid gap-2 text-sm">
           {items.slice(0, 14).map((item) => <li key={item} className="truncate font-mono">{item}</li>)}
@@ -366,4 +382,35 @@ function languageFor(path: string) {
   if (path.endsWith(".json")) return "json";
   if (path.endsWith(".md")) return "markdown";
   return "plaintext";
+}
+
+function toFlow(rawNodes: any[], rawEdges: any[]): { nodes: Node[]; edges: Edge[] } {
+  const selectedNodes = rawNodes.slice(0, 80);
+  const columns = 5;
+  const nodes: Node[] = selectedNodes.map((node, index) => ({
+    id: node.id,
+    position: { x: (index % columns) * 220, y: Math.floor(index / columns) * 110 },
+    data: { label: `${node.type}: ${node.name}` },
+    style: {
+      border: "1px solid #22577a",
+      borderRadius: 4,
+      background: node.type === "Repository" ? "#d6e356" : node.type === "Dependency" ? "#f4f1e8" : "#ffffff",
+      color: "#16181d",
+      fontSize: 12,
+      width: 190
+    }
+  }));
+  const nodeIds = new Set(nodes.map((node) => node.id));
+  const edges: Edge[] = rawEdges
+    .filter((edge) => nodeIds.has(edge.source) && nodeIds.has(edge.target))
+    .slice(0, 160)
+    .map((edge, index) => ({
+      id: `${edge.source}-${edge.type}-${edge.target}-${index}`,
+      source: edge.source,
+      target: edge.target,
+      label: edge.type,
+      animated: edge.type === "calls",
+      type: "smoothstep"
+    }));
+  return { nodes, edges };
 }

@@ -55,6 +55,10 @@ def _extract_with_tree_sitter(relative_path: str, source: str) -> list[CodeSymbo
             symbols.append(_symbol_from_tree_sitter_node(relative_path, source, node, symbol_type))
         elif node_type in {"method_definition"}:
             symbols.append(_symbol_from_tree_sitter_node(relative_path, source, node, "method"))
+        elif node_type in {"lexical_declaration", "variable_declaration"}:
+            arrow_symbol = _arrow_function_symbol_from_declaration(relative_path, source, node, in_class)
+            if arrow_symbol is not None:
+                symbols.append(arrow_symbol)
         elif node_type in {"import_statement", "import_from_statement"}:
             symbols.append(_symbol_from_tree_sitter_node(relative_path, source, node, "import"))
         elif node_type in {"export_statement"}:
@@ -71,6 +75,10 @@ def _load_tree_sitter_parser(language: str | None):
     if language is None:
         return None
 
+    direct = _load_direct_tree_sitter_parser(language)
+    if direct is not None:
+        return direct
+
     for module_name in ("tree_sitter_language_pack", "tree_sitter_languages"):
         try:
             module = __import__(module_name, fromlist=["get_parser"])
@@ -79,6 +87,34 @@ def _load_tree_sitter_parser(language: str | None):
         except Exception:
             continue
     return None
+
+
+def _load_direct_tree_sitter_parser(language: str):
+    try:
+        from tree_sitter import Language, Parser
+    except Exception:
+        return None
+
+    try:
+        if language == "python":
+            import tree_sitter_python
+
+            ts_language = Language(tree_sitter_python.language())
+        elif language == "javascript":
+            import tree_sitter_javascript
+
+            ts_language = Language(tree_sitter_javascript.language())
+        elif language == "typescript":
+            import tree_sitter_typescript
+
+            ts_language = Language(tree_sitter_typescript.language_typescript())
+        else:
+            return None
+        parser = Parser()
+        parser.language = ts_language
+        return parser
+    except Exception:
+        return None
 
 
 def _symbol_from_tree_sitter_node(relative_path: str, source: str, node, symbol_type: str) -> CodeSymbol:
@@ -90,11 +126,36 @@ def _symbol_from_tree_sitter_node(relative_path: str, source: str, node, symbol_
         name_node = node.child_by_field_name("name")
     except Exception:
         name_node = None
-    name = _node_text(source, name_node) if name_node is not None else _name_from_signature(symbol_type, signature)
+    if symbol_type in {"import", "export"}:
+        name = _name_from_signature(symbol_type, signature)
+    else:
+        name = _node_text(source, name_node) if name_node is not None else _name_from_signature(symbol_type, signature)
     return _make_symbol(
         relative_path=relative_path,
         name=name,
         symbol_type=symbol_type,
+        start_line=start_line,
+        end_line=max(start_line, end_line),
+        signature=signature,
+        language=_language_name(relative_path),
+        metadata={"parser": "tree-sitter"},
+    )
+
+
+def _arrow_function_symbol_from_declaration(relative_path: str, source: str, node, in_class: bool) -> CodeSymbol | None:
+    text = _node_text(source, node)
+    if "=>" not in text:
+        return None
+    match = re.search(r"\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=", text)
+    if not match:
+        return None
+    start_line = _point_line(getattr(node, "start_point", (0, 0)))
+    end_line = _point_line(getattr(node, "end_point", (start_line - 1, 0)))
+    signature = _line_at(source, start_line)
+    return _make_symbol(
+        relative_path=relative_path,
+        name=match.group(1),
+        symbol_type="method" if in_class else "function",
         start_line=start_line,
         end_line=max(start_line, end_line),
         signature=signature,
@@ -294,6 +355,12 @@ def _node_text(source: str, node) -> str:
 
 def _name_from_signature(symbol_type: str, signature: str) -> str:
     if symbol_type in {"import", "export"}:
+        from_match = re.match(r"from\s+([A-Za-z0-9_.$]+)\s+import\s+(.+)", signature)
+        if from_match:
+            return f"{from_match.group(1)} import {from_match.group(2).strip()}"
+        import_match = re.match(r"import\s+([A-Za-z0-9_.$]+)$", signature)
+        if import_match:
+            return import_match.group(1)
         match = re.search(r"['\"]([^'\"]+)['\"]", signature)
         return match.group(1) if match else signature
     match = re.search(r"(?:class|function|def)\s+([A-Za-z_$][\w$]*)", signature)

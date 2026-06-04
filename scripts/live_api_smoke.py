@@ -64,6 +64,8 @@ def main() -> None:
                 "ask_has_citations": bool(ask.json()["citations"]),
                 "wiki_trace_steps": len(wiki_trace.json()["run"]["steps"]),
                 "ask_trace_steps": len(ask_trace.json()["run"]["steps"]),
+                "wiki_token_usage": wiki_trace.json()["run"]["token_usage"],
+                "ask_token_usage": ask_trace.json()["run"]["token_usage"],
                 "answer_preview": ask.json()["answer"][:120],
             }
         )

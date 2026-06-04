@@ -12,6 +12,7 @@ class ClaudeClient(BaseModelClient):
     provider = "claude"
 
     def __init__(self) -> None:
+        super().__init__()
         self.api_key = os.getenv("ANTHROPIC_API_KEY", "")
         self.model = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-5")
         self.base_url = os.getenv("ANTHROPIC_BASE_URL", "https://api.anthropic.com").rstrip("/")
@@ -35,6 +36,10 @@ class ClaudeClient(BaseModelClient):
             response = await client.post(f"{self.base_url}/v1/messages", headers=headers, json=body)
             response.raise_for_status()
             payload = response.json()
+        usage = payload.get("usage") or {}
+        from packages.model_gateway.base import ModelUsage
+
+        self.record_usage(ModelUsage(input_tokens=int(usage.get("input_tokens") or 0), output_tokens=int(usage.get("output_tokens") or 0)))
         return "\n".join(part.get("text", "") for part in payload.get("content", []) if part.get("type") == "text")
 
     async def generate_json(self, messages: list[dict[str, Any]], schema: dict[str, Any]) -> dict[str, Any]:

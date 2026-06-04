@@ -30,7 +30,8 @@ from packages.model_gateway import create_model_client
 from packages.repo_ingestion.clone import CloneResult, InvalidRepositoryUrl, RepositoryCloneError, clone_repository
 from packages.repo_ingestion.detect import scan_repository
 from packages.repo_ingestion.profile import build_repo_profile
-from packages.storage import FileRepositoryStore, RepositoryRecord
+from packages.storage import FileRepositoryStore, RepositoryRecord, create_repository_store
+from packages.tasks import create_task_queue
 
 CloneFunc = Callable[[str, str, int], CloneResult]
 
@@ -44,8 +45,9 @@ def create_app(
         description="Repository ingestion and profiling API for RepoMind.",
         version="0.1.0",
     )
-    app.state.store = store or FileRepositoryStore()
+    app.state.store = store or create_repository_store()
     app.state.clone_repository = clone_func
+    app.state.task_queue = create_task_queue()
 
     app.add_middleware(
         CORSMiddleware,
@@ -143,7 +145,10 @@ def create_app(
         store: FileRepositoryStore = request.app.state.store
         record = _get_record_or_404(request, repo_id)
         runtime = AgentRuntime(create_model_client())
-        pages, run = await runtime.generate_wiki(record)
+        task = await request.app.state.task_queue.enqueue("generate_wiki_job", lambda: runtime.generate_wiki(record))
+        if task.status != "completed":
+            raise HTTPException(status_code=202, detail={"task_id": task.task_id, "status": task.status})
+        pages, run = task.result
         record.wiki_pages = pages
         record.agent_runs.append(run)
         store.save(record)

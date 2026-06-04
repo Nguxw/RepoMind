@@ -15,6 +15,7 @@ class AgentRuntime:
 
     async def generate_wiki(self, record: RepositoryRecord) -> tuple[list, AgentRun]:
         run = AgentRun(task="generate wiki", repo_id=record.repo_id, model=f"{self.model_client.provider}:{self.model_client.model}")
+        usage_offset = len(self.model_client.usage_history)
         generator = WikiGenerator(self.model_client)
         pages = await generator.generate(record.profile, _file_paths(record), record.symbols, record.graph_or_empty())
         run.steps.append(ToolCall(tool="wiki_planner", input={}, output=[page.title for page in pages]))
@@ -27,17 +28,26 @@ class AgentRuntime:
                 )
             )
         run.steps.append(ToolCall(tool="citation_checker", input={}, output=sum(len(page.invalid_citation_warnings) for page in pages)))
+        run.token_usage = self._usage_since(usage_offset)
         run.output = {"wiki_pages": [page.model_dump(mode="json") for page in pages]}
         return pages, run
 
     async def ask(self, record: RepositoryRecord, question: str) -> tuple[AskAnswer, AgentRun]:
         run = AgentRun(task="ask wiki", repo_id=record.repo_id, model=f"{self.model_client.provider}:{self.model_client.model}")
+        usage_offset = len(self.model_client.usage_history)
         context = retrieve_context(record.profile, record.wiki_pages, record.symbols, question)
         run.steps.append(ToolCall(tool="retrieve_context", input={"question": question}, output=context.model_dump(mode="json")))
         answer_text = await self._generate_answer_text(question, context, run)
         answer = AskAnswer(question=question, answer=answer_text, citations=context.citations, run_id=run.run_id)
+        run.token_usage = self._usage_since(usage_offset)
         run.output = answer.model_dump(mode="json")
         return answer, run
+
+    def _usage_since(self, offset: int):
+        usage = self.model_client.usage_since(offset)
+        from packages.harness.state import TokenUsage
+
+        return TokenUsage(input_tokens=usage.input_tokens, output_tokens=usage.output_tokens)
 
     async def _generate_answer_text(self, question: str, context, run: AgentRun) -> str:
         if not context.citations:

@@ -6,7 +6,17 @@ from pydantic import BaseModel, Field
 
 SymbolType = Literal["class", "function", "method", "import", "export"]
 GraphNodeType = Literal["Repository", "Directory", "File", "Class", "Function", "Method", "Config", "Dependency", "WikiPage"]
-GraphEdgeType = Literal["contains", "defines", "imports", "depends_on", "documents", "related_to"]
+GraphEdgeType = Literal["contains", "defines", "imports", "depends_on", "documents", "related_to", "calls"]
+
+
+class CodeCall(BaseModel):
+    caller_symbol_id: str
+    caller_name: str
+    callee_name: str
+    file_path: str
+    line: int
+    language: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class CodeSymbol(BaseModel):

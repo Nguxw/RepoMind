@@ -13,6 +13,7 @@ async def test_mock_model_client_generates_text_and_json():
     assert "citations" in text.lower()
     assert payload["title"] == "Overview"
     assert payload["sections"]
+    assert client.usage_since(0).input_tokens > 0
 
 
 def test_model_factory_defaults_to_mock():

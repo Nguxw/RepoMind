@@ -1,15 +1,68 @@
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: repomind
+      POSTGRES_PASSWORD: repomind
+      POSTGRES_DB: repomind
+    ports:
+      - "5432:5432"
+    volumes:
+      - repomind-postgres:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - repomind-qdrant:/qdrant/storage
+
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
     env_file:
       - .env.example
+    environment:
+      REPOMIND_STORAGE: postgres
+      REPOMIND_QUEUE_MODE: inline
+      REPOMIND_VECTOR_STORE: memory
+      DATABASE_URL: postgresql+psycopg://repomind:repomind@postgres:5432/repomind
+      REDIS_URL: redis://redis:6379/0
+      QDRANT_URL: http://qdrant:6333
     ports:
       - "8000:8000"
     volumes:
       - repomind-data:/app/data
+    depends_on:
+      - postgres
+      - redis
+      - qdrant
     command: uvicorn apps.api.main:app --host 0.0.0.0 --port 8000
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - .env.example
+    environment:
+      REPOMIND_STORAGE: postgres
+      REPOMIND_QUEUE_MODE: arq
+      DATABASE_URL: postgresql+psycopg://repomind:repomind@postgres:5432/repomind
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - postgres
+      - redis
+    volumes:
+      - repomind-data:/app/data
+    command: python -m arq packages.tasks.worker.WorkerSettings
 
   web:
     build:
@@ -24,3 +77,5 @@ services:
 
 volumes:
   repomind-data:
+  repomind-postgres:
+  repomind-qdrant:

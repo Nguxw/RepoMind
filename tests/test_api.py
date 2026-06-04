@@ -11,7 +11,7 @@ def test_import_profile_and_files_endpoints(tmp_path: Path):
     repo_root = tmp_path / "fixture_repo"
     repo_root.mkdir()
     (repo_root / "README.md").write_text("# Fixture\n", encoding="utf-8")
-    (repo_root / "main.py").write_text("import os\n\nclass App:\n    def run(self):\n        return os.getcwd()\n", encoding="utf-8")
+    (repo_root / "main.py").write_text("import os\n\ndef helper():\n    return os.getcwd()\n\nclass App:\n    def run(self):\n        return helper()\n", encoding="utf-8")
 
     def fake_clone(url: str, destination_root: str, timeout_seconds: int) -> CloneResult:
         return CloneResult(
@@ -51,6 +51,7 @@ def test_import_profile_and_files_endpoints(tmp_path: Path):
     graph_payload = graph.json()["graph"]
     assert any(node["type"] == "Repository" for node in graph_payload["nodes"])
     assert any(edge["type"] == "defines" for edge in graph_payload["edges"])
+    assert any(edge["type"] == "calls" for edge in graph_payload["edges"])
 
     source = client.get("/api/repos/repo123/source", params={"path": "main.py"})
     assert source.status_code == 200
@@ -80,3 +81,4 @@ def test_import_profile_and_files_endpoints(tmp_path: Path):
     assert trace.status_code == 200
     assert trace.json()["run"]["steps"]
     assert any(step["tool"] == "model_call" for step in trace.json()["run"]["steps"])
+    assert trace.json()["run"]["token_usage"]["input_tokens"] > 0

@@ -3,21 +3,26 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from packages.model_gateway.base import BaseModelClient
+from packages.model_gateway.base import BaseModelClient, ModelUsage
 
 
 class MockModelClient(BaseModelClient):
     provider = "mock"
     model = "mock-repomind"
 
+    def __init__(self) -> None:
+        super().__init__()
+
     async def generate_text(self, messages: list[dict[str, Any]]) -> str:
         prompt = "\n".join(str(message.get("content", "")) for message in messages)
+        self.record_usage(_estimate_usage(prompt, 64))
         if "question" in prompt.lower():
             return "I found the answer in the repository evidence. See the attached citations."
         return "RepoMind mock response generated from repository evidence."
 
     async def generate_json(self, messages: list[dict[str, Any]], schema: dict[str, Any]) -> dict[str, Any]:
         title = _infer_title(messages)
+        self.record_usage(_estimate_usage("\n".join(str(message.get("content", "")) for message in messages), 96))
         return {
             "title": title,
             "summary": f"{title} generated from repository evidence.",
@@ -49,3 +54,7 @@ def _infer_title(messages: list[dict[str, Any]]) -> str:
     except json.JSONDecodeError:
         pass
     return "RepoMind Page"
+
+
+def _estimate_usage(prompt: str, output_chars: int) -> ModelUsage:
+    return ModelUsage(input_tokens=max(1, len(prompt) // 4), output_tokens=max(1, output_chars // 4))

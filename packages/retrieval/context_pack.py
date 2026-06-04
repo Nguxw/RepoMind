@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 from packages.code_intelligence.models import CodeSymbol
 from packages.repo_ingestion.models import RepoProfile
+from packages.retrieval.vector_search import InMemoryVectorStore
 from packages.wiki_engine.models import Citation, WikiPage
 
 
@@ -25,12 +26,28 @@ class ContextPack(BaseModel):
 
 def retrieve_context(profile: RepoProfile, wiki_pages: list[WikiPage], symbols: list[CodeSymbol], question: str, limit: int = 6) -> ContextPack:
     terms = _terms(question)
+    vector_store = InMemoryVectorStore()
+    vector_store.upsert_texts(
+        [
+            (f"wiki:{page.slug}", f"{page.title}\n{page.summary}\n" + "\n".join(section.content for section in page.sections), {"kind": "wiki", "slug": page.slug})
+            for page in wiki_pages
+        ]
+        + [
+            (f"symbol:{symbol.id}", f"{symbol.name} {symbol.type} {symbol.file_path} {symbol.signature}", {"kind": "symbol", "symbol_id": symbol.id})
+            for symbol in symbols
+        ]
+    )
+    vector_hits = vector_store.search(question, limit=limit)
+    vector_page_slugs = [hit.metadata["slug"] for hit in vector_hits if hit.metadata.get("kind") == "wiki"]
+    vector_symbol_ids = [hit.metadata["symbol_id"] for hit in vector_hits if hit.metadata.get("kind") == "symbol"]
     matched_pages = sorted(wiki_pages, key=lambda page: _score(page.title + " " + page.summary, terms), reverse=True)[:3]
+    matched_pages = _merge_pages(matched_pages, [page for page in wiki_pages if page.slug in vector_page_slugs])[:3]
     matched_symbols = sorted(
         symbols,
         key=lambda symbol: _score(f"{symbol.name} {symbol.file_path} {symbol.signature}", terms),
         reverse=True,
     )[:limit]
+    matched_symbols = _merge_symbols(matched_symbols, [symbol for symbol in symbols if symbol.id in vector_symbol_ids])[:limit]
 
     citations: list[Citation] = []
     for page in matched_pages:
@@ -41,6 +58,28 @@ def retrieve_context(profile: RepoProfile, wiki_pages: list[WikiPage], symbols: 
     snippets = [_read_snippet(profile.local_path, citation) for citation in citations]
     snippets = [snippet for snippet in snippets if snippet.content]
     return ContextPack(wiki_pages=matched_pages, symbols=matched_symbols, snippets=snippets, citations=citations)
+
+
+def _merge_pages(primary: list[WikiPage], secondary: list[WikiPage]) -> list[WikiPage]:
+    seen: set[str] = set()
+    merged: list[WikiPage] = []
+    for page in [*secondary, *primary]:
+        if page.slug in seen:
+            continue
+        seen.add(page.slug)
+        merged.append(page)
+    return merged
+
+
+def _merge_symbols(primary: list[CodeSymbol], secondary: list[CodeSymbol]) -> list[CodeSymbol]:
+    seen: set[str] = set()
+    merged: list[CodeSymbol] = []
+    for symbol in [*secondary, *primary]:
+        if symbol.id in seen:
+            continue
+        seen.add(symbol.id)
+        merged.append(symbol)
+    return merged
 
 
 def _terms(question: str) -> list[str]:

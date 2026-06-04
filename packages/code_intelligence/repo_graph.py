@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from packages.code_intelligence.models import CodeSymbol, GraphEdge, GraphNode, RepoGraph
+from packages.code_intelligence.call_graph import extract_calls
+from packages.code_intelligence.models import CodeCall, CodeSymbol, GraphEdge, GraphNode, RepoGraph
 from packages.repo_ingestion.manifests import is_config_file, is_dependency_file
 from packages.repo_ingestion.models import RepoProfile
 
@@ -27,6 +28,9 @@ def build_repo_graph(repo_id: str, profile: RepoProfile, file_paths: list[str], 
 
     for symbol in symbols:
         builder.add_symbol(symbol)
+
+    for call in extract_calls(profile.local_path, file_paths, symbols):
+        builder.add_call(call, symbols)
 
     return RepoGraph(repo_id=repo_id, nodes=list(builder.nodes.values()), edges=list(builder.edges.values()))
 
@@ -94,3 +98,41 @@ class _RepoGraphBuilder:
             )
         )
         self.add_edge(GraphEdge(source=f"file:{symbol.file_path}", target=symbol_id, type="defines"))
+
+    def add_call(self, call: CodeCall, symbols: list[CodeSymbol]) -> None:
+        caller_id = f"symbol:{call.caller_symbol_id}"
+        target_symbol = _resolve_callee(call, symbols)
+        if target_symbol is not None:
+            target_id = f"symbol:{target_symbol.id}"
+            self.add_edge(
+                GraphEdge(
+                    source=caller_id,
+                    target=target_id,
+                    type="calls",
+                    metadata={"line": call.line, "callee": call.callee_name, "resolution": "symbol"},
+                )
+            )
+            return
+
+        dependency_id = f"dependency:call:{call.callee_name}"
+        self.add_node(GraphNode(id=dependency_id, type="Dependency", name=call.callee_name, metadata={"source": "call"}))
+        self.add_edge(
+            GraphEdge(
+                source=caller_id,
+                target=dependency_id,
+                type="calls",
+                metadata={"line": call.line, "callee": call.callee_name, "resolution": "external_or_unresolved"},
+            )
+        )
+
+
+def _resolve_callee(call: CodeCall, symbols: list[CodeSymbol]) -> CodeSymbol | None:
+    local_names = {call.callee_name, call.callee_name.split(".")[-1]}
+    candidates = [
+        symbol for symbol in symbols
+        if symbol.type in {"function", "method", "class"} and symbol.name in local_names and symbol.file_path == call.file_path
+    ]
+    if candidates:
+        return candidates[0]
+    candidates = [symbol for symbol in symbols if symbol.type in {"function", "method", "class"} and symbol.name in local_names]
+    return candidates[0] if candidates else None
