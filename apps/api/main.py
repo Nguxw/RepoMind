@@ -11,8 +11,12 @@ from apps.api.schemas import (
     FileTreeResponse,
     ImportRepositoryRequest,
     ImportRepositoryResponse,
+    RepoGraphResponse,
     RepoProfileResponse,
+    SymbolsResponse,
 )
+from packages.code_intelligence import build_repo_graph, extract_symbols
+from packages.code_intelligence.models import RepoGraph
 from packages.repo_ingestion.clone import CloneResult, InvalidRepositoryUrl, RepositoryCloneError, clone_repository
 from packages.repo_ingestion.detect import scan_repository
 from packages.repo_ingestion.profile import build_repo_profile
@@ -72,6 +76,9 @@ def create_app(
             clone_result.commit_sha,
         )
 
+        symbols = await run_in_threadpool(extract_symbols, clone_result.local_path, scan.included_files)
+        graph = await run_in_threadpool(build_repo_graph, clone_result.repo_id, profile, scan.included_files, symbols)
+
         store.save(
             RepositoryRecord(
                 repo_id=clone_result.repo_id,
@@ -79,6 +86,8 @@ def create_app(
                 local_path=clone_result.local_path,
                 profile=profile,
                 file_tree=scan.file_tree,
+                symbols=symbols,
+                graph=graph,
             )
         )
 
@@ -101,6 +110,17 @@ def create_app(
     async def get_files(repo_id: str, request: Request) -> FileTreeResponse:
         record = _get_record_or_404(request, repo_id)
         return FileTreeResponse(repo_id=repo_id, tree=record.file_tree)
+
+    @app.get("/api/repos/{repo_id}/symbols", response_model=SymbolsResponse)
+    async def get_symbols(repo_id: str, request: Request) -> SymbolsResponse:
+        record = _get_record_or_404(request, repo_id)
+        return SymbolsResponse(repo_id=repo_id, symbols=record.symbols)
+
+    @app.get("/api/repos/{repo_id}/graph", response_model=RepoGraphResponse)
+    async def get_graph(repo_id: str, request: Request) -> RepoGraphResponse:
+        record = _get_record_or_404(request, repo_id)
+        graph = record.graph or RepoGraph(repo_id=repo_id)
+        return RepoGraphResponse(repo_id=repo_id, graph=graph)
 
     return app
 

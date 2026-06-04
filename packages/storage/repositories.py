@@ -7,6 +7,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from packages.code_intelligence.models import CodeSymbol, RepoGraph
 from packages.repo_ingestion.models import FileNode, RepoProfile
 
 
@@ -16,6 +17,8 @@ class RepositoryRecord(BaseModel):
     local_path: str
     profile: RepoProfile
     file_tree: FileNode
+    symbols: list[CodeSymbol] = Field(default_factory=list)
+    graph: RepoGraph | None = None
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

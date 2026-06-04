@@ -11,7 +11,7 @@ def test_import_profile_and_files_endpoints(tmp_path: Path):
     repo_root = tmp_path / "fixture_repo"
     repo_root.mkdir()
     (repo_root / "README.md").write_text("# Fixture\n", encoding="utf-8")
-    (repo_root / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    (repo_root / "main.py").write_text("import os\n\nclass App:\n    def run(self):\n        return os.getcwd()\n", encoding="utf-8")
 
     def fake_clone(url: str, destination_root: str, timeout_seconds: int) -> CloneResult:
         return CloneResult(
@@ -40,3 +40,14 @@ def test_import_profile_and_files_endpoints(tmp_path: Path):
     files = client.get("/api/repos/repo123/files")
     assert files.status_code == 200
     assert files.json()["tree"]["type"] == "directory"
+
+    symbols = client.get("/api/repos/repo123/symbols")
+    assert symbols.status_code == 200
+    symbol_names = {symbol["name"] for symbol in symbols.json()["symbols"]}
+    assert {"os", "App", "run"} <= symbol_names
+
+    graph = client.get("/api/repos/repo123/graph")
+    assert graph.status_code == 200
+    graph_payload = graph.json()["graph"]
+    assert any(node["type"] == "Repository" for node in graph_payload["nodes"])
+    assert any(edge["type"] == "defines" for edge in graph_payload["edges"])

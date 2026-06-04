@@ -10,6 +10,8 @@ This stage intentionally does not include LLM calls, Tree-sitter indexing, Wiki 
 - Ignore noisy or unsafe content such as `.git`, `node_modules`, virtual environments, build outputs, binary files, and large files.
 - Generate a file tree for included files.
 - Detect languages, package managers, frameworks, README files, dependency files, config files, entrypoints, tests, important files, and important directories.
+- Extract Python, JavaScript, and TypeScript symbols for classes, functions, methods, imports, and exports.
+- Build a minimal RepoKG with Repository, Directory, File, Config, Dependency, Class, Function, and Method nodes.
 - Store import metadata locally under `data/metadata`.
 - Expose a small FastAPI API for import/profile/file-tree access.
 
@@ -31,6 +33,8 @@ GET  /health
 POST /api/repos/import
 GET  /api/repos/{repo_id}/profile
 GET  /api/repos/{repo_id}/files
+GET  /api/repos/{repo_id}/symbols
+GET  /api/repos/{repo_id}/graph
 ```
 
 Example import request:
@@ -54,6 +58,14 @@ Run tests:
 ```bash
 python -m pytest
 ```
+
+Optional Tree-sitter parser support:
+
+```bash
+python -m pip install -e ".[parser]"
+```
+
+The symbol extractor will use Tree-sitter when language parsers are installed. Without them, the MVP falls back to Python AST and lightweight JavaScript/TypeScript parsing so the ingestion workflow remains runnable.
 
 Start the API:
 
@@ -91,8 +103,7 @@ REPOMIND_CLONE_TIMEOUT_SECONDS=120
 
 ## Next Stages
 
-1. Add Tree-sitter symbol extraction for Python, then JavaScript and TypeScript.
-2. Build the minimal RepoKG from files, directories, imports, and symbols.
-3. Add `ModelGateway` with OpenAI-compatible and mock clients.
-4. Implement `WikiEngine` with structured pages, citations, and Mermaid diagrams.
-5. Build the Next.js workbench UI with Wiki, Evidence, Monaco, Mermaid, and Ask panels.
+1. Add `ModelGateway` with OpenAI-compatible and mock clients.
+2. Implement `WikiEngine` with structured pages, citations, and Mermaid diagrams.
+3. Build the Next.js workbench UI with Wiki, Evidence, Monaco, Mermaid, and Ask panels.
+4. Add persistent PostgreSQL storage for profiles, symbols, graph edges, wiki pages, and traces.

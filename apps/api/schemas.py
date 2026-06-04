@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
+from packages.code_intelligence.models import CodeSymbol, RepoGraph
 from packages.repo_ingestion.models import FileNode, RepoProfile
 
 
@@ -27,3 +28,13 @@ class FileTreeResponse(BaseModel):
 class RepoProfileResponse(BaseModel):
     repo_id: str
     profile: RepoProfile
+
+
+class SymbolsResponse(BaseModel):
+    repo_id: str
+    symbols: list[CodeSymbol]
+
+
+class RepoGraphResponse(BaseModel):
+    repo_id: str
+    graph: RepoGraph
