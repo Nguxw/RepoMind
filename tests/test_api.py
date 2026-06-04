@@ -1,0 +1,42 @@
+from pathlib import Path
+
+from fastapi.testclient import TestClient
+
+from apps.api.main import create_app
+from packages.repo_ingestion.clone import CloneResult
+from packages.storage import FileRepositoryStore
+
+
+def test_import_profile_and_files_endpoints(tmp_path: Path):
+    repo_root = tmp_path / "fixture_repo"
+    repo_root.mkdir()
+    (repo_root / "README.md").write_text("# Fixture\n", encoding="utf-8")
+    (repo_root / "main.py").write_text("print('ok')\n", encoding="utf-8")
+
+    def fake_clone(url: str, destination_root: str, timeout_seconds: int) -> CloneResult:
+        return CloneResult(
+            repo_id="repo123",
+            local_path=str(repo_root),
+            commit_sha="abc123",
+            normalized_url="https://github.com/example/fixture.git",
+        )
+
+    app = create_app(store=FileRepositoryStore(tmp_path / "data"), clone_func=fake_clone)
+    client = TestClient(app)
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.json()["status"] == "ok"
+
+    imported = client.post("/api/repos/import", json={"url": "https://github.com/example/fixture"})
+    assert imported.status_code == 200
+    assert imported.json()["repo_id"] == "repo123"
+    assert imported.json()["repo_name"] == "fixture"
+
+    profile = client.get("/api/repos/repo123/profile")
+    assert profile.status_code == 200
+    assert profile.json()["profile"]["readme_files"] == ["README.md"]
+
+    files = client.get("/api/repos/repo123/files")
+    assert files.status_code == 200
+    assert files.json()["tree"]["type"] == "directory"
