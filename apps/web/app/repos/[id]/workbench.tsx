@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { Activity, Bot, Braces, FileCode2, GitBranch, Loader2, Network, RefreshCcw, Search, Send } from "lucide-react";
@@ -34,6 +34,16 @@ type WikiPage = {
   invalid_citation_warnings: string[];
 };
 
+type AskTurn = {
+  id: string;
+  question: string;
+  answer?: string;
+  citations: Citation[];
+  run_id?: string;
+  pending?: boolean;
+  error?: string;
+};
+
 export default function RepoWorkbench({ repoId, initialTab }: { repoId: string; initialTab: Tab }) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const [profile, setProfile] = useState<any>(null);
@@ -42,9 +52,10 @@ export default function RepoWorkbench({ repoId, initialTab }: { repoId: string; 
   const [wiki, setWiki] = useState<WikiPage[]>([]);
   const [activeSlug, setActiveSlug] = useState("overview");
   const [source, setSource] = useState<{ path: string; content: string; citation?: Citation } | null>(null);
-  const [question, setQuestion] = useState("Where should I start reading this repository?");
-  const [answer, setAnswer] = useState<any>(null);
-  const [loading, setLoading] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [askTurns, setAskTurns] = useState<AskTurn[]>([]);
+  const [wikiLoading, setWikiLoading] = useState(false);
+  const [askLoading, setAskLoading] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -66,7 +77,7 @@ export default function RepoWorkbench({ repoId, initialTab }: { repoId: string; 
   const activePage = useMemo(() => wiki.find((page) => page.slug === activeSlug) ?? wiki[0], [wiki, activeSlug]);
 
   async function generateWiki() {
-    setLoading(true);
+    setWikiLoading(true);
     setError("");
     try {
       const payload = await fetchJson(`/api/repos/${repoId}/wiki/generate`, { method: "POST" });
@@ -75,7 +86,7 @@ export default function RepoWorkbench({ repoId, initialTab }: { repoId: string; 
     } catch (err) {
       setError(String(err));
     } finally {
-      setLoading(false);
+      setWikiLoading(false);
     }
   }
 
@@ -89,26 +100,50 @@ export default function RepoWorkbench({ repoId, initialTab }: { repoId: string; 
   }
 
   async function askRepo() {
-    setLoading(true);
+    const submittedQuestion = question.trim();
+    if (!submittedQuestion || askLoading) return;
+
+    const turnId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setAskTurns((turns) => [
+      ...turns,
+      { id: turnId, question: submittedQuestion, citations: [], pending: true }
+    ]);
+    setQuestion("");
+    setAskLoading(true);
     setError("");
     try {
       const payload = await fetchJson(`/api/repos/${repoId}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question })
+        body: JSON.stringify({ question: submittedQuestion })
       });
-      setAnswer(payload);
+      setAskTurns((turns) => turns.map((turn) => turn.id === turnId
+        ? {
+            id: turn.id,
+            question: turn.question,
+            answer: payload.answer,
+            citations: payload.citations ?? [],
+            run_id: payload.run_id,
+            pending: false
+          }
+        : turn
+      ));
       if (payload.citations?.[0]) openCitation(payload.citations[0]);
     } catch (err) {
-      setError(String(err));
+      const message = String(err);
+      setError(message);
+      setAskTurns((turns) => turns.map((turn) => turn.id === turnId
+        ? { ...turn, pending: false, error: message }
+        : turn
+      ));
     } finally {
-      setLoading(false);
+      setAskLoading(false);
     }
   }
 
   return (
-    <main className="min-h-screen px-3 py-4 md:px-5">
-      <div className="mx-auto grid max-w-[1760px] gap-3">
+    <main className="min-h-screen px-3 py-3 md:px-5">
+      <div className="grid min-h-[calc(100vh-1.5rem)] gap-3">
         <header className="panel flex flex-wrap items-center justify-between gap-3 rounded-md px-4 py-3">
           <div>
             <div className="flex items-center gap-2 text-sm font-bold uppercase text-ink/60">
@@ -127,15 +162,15 @@ export default function RepoWorkbench({ repoId, initialTab }: { repoId: string; 
 
         {error ? <div className="border border-rust bg-rust/10 px-4 py-2 text-sm text-rust">{error}</div> : null}
 
-        <section className="grid gap-3 xl:grid-cols-[280px_minmax(0,1fr)_420px]">
-          <aside className="panel min-h-[72vh] rounded-md p-3">
+        <section className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[300px_minmax(0,1fr)_minmax(420px,32vw)]">
+          <aside className="panel min-h-[78vh] rounded-md p-3 xl:h-[calc(100vh-7.6rem)]">
             <Button
               onClick={generateWiki}
               className="mb-3 w-full"
               variant="signal"
-              disabled={loading}
+              disabled={wikiLoading}
             >
-              {loading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
+              {wikiLoading ? <Loader2 className="animate-spin" size={16} /> : <RefreshCcw size={16} />}
               Generate Wiki
             </Button>
             <div className="space-y-2">
@@ -151,20 +186,30 @@ export default function RepoWorkbench({ repoId, initialTab }: { repoId: string; 
             </div>
           </aside>
 
-          <section className="panel min-h-[72vh] overflow-hidden rounded-md">
+          <section className="panel min-h-[78vh] overflow-hidden rounded-md xl:h-[calc(100vh-7.6rem)]">
             {tab === "overview" ? <OverviewPanel profile={profile} symbols={symbols} graph={graph} /> : null}
             {tab === "wiki" ? <WikiPanel page={activePage} openCitation={openCitation} /> : null}
             {tab === "graph" ? <GraphPanel graph={graph} /> : null}
-            {tab === "ask" ? <AskPanel question={question} setQuestion={setQuestion} askRepo={askRepo} answer={answer} openCitation={openCitation} loading={loading} repoId={repoId} /> : null}
+            {tab === "ask" ? (
+              <AskPanel
+                question={question}
+                setQuestion={setQuestion}
+                askRepo={askRepo}
+                turns={askTurns}
+                openCitation={openCitation}
+                loading={askLoading}
+                repoId={repoId}
+              />
+            ) : null}
           </section>
 
-          <aside className="panel min-h-[72vh] rounded-md p-3">
+          <aside className="panel min-h-[78vh] rounded-md p-3 xl:h-[calc(100vh-7.6rem)]">
             <div className="mb-3 flex items-center gap-2 text-sm font-bold uppercase text-ink/60">
               <Search size={16} aria-hidden />
               Evidence
             </div>
             {source ? (
-              <div className="h-[68vh] overflow-hidden border border-zincLine bg-white">
+              <div className="h-[calc(100%-2.25rem)] min-h-[68vh] overflow-hidden border border-zincLine bg-white">
                 <div className="border-b border-zincLine bg-paper px-3 py-2 font-mono text-xs">
                   {source.path}:{source.citation?.start_line}-{source.citation?.end_line}
                 </div>
@@ -212,7 +257,7 @@ function OverviewPanel({ profile, symbols, graph }: { profile: any; symbols: any
 function WikiPanel({ page, openCitation }: { page?: WikiPage; openCitation: (citation: Citation) => void }) {
   if (!page) return <div className="p-6 text-ink/60">Generate the wiki to inspect structured pages.</div>;
   return (
-    <article className="max-h-[72vh] overflow-auto p-5">
+    <article className="h-full overflow-auto p-5">
       <h2 className="text-3xl font-black">{page.title}</h2>
       <p className="mt-2 max-w-3xl leading-7 text-ink/70">{page.summary}</p>
       {page.invalid_citation_warnings.length ? (
@@ -237,7 +282,7 @@ function GraphPanel({ graph }: { graph: any }) {
   const edges = graph?.edges ?? [];
   const flow = toFlow(nodes, edges);
   return (
-    <div className="grid max-h-[72vh] gap-4 overflow-auto p-4">
+    <div className="grid h-full gap-4 overflow-auto p-4">
       <div className="grid gap-3 md:grid-cols-3">
         <Metric label="Nodes" value={String(nodes.length)} />
         <Metric label="Edges" value={String(edges.length)} />
@@ -258,33 +303,142 @@ function GraphPanel({ graph }: { graph: any }) {
   );
 }
 
-function AskPanel({ question, setQuestion, askRepo, answer, openCitation, loading, repoId }: any) {
+function AskPanel({
+  question,
+  setQuestion,
+  askRepo,
+  turns,
+  openCitation,
+  loading,
+  repoId
+}: {
+  question: string;
+  setQuestion: (value: string) => void;
+  askRepo: () => void;
+  turns: AskTurn[];
+  openCitation: (citation: Citation) => void;
+  loading: boolean;
+  repoId: string;
+}) {
+  const endRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [turns]);
+
+  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      askRepo();
+    }
+  }
+
   return (
-    <div className="grid h-full content-between gap-4 p-4">
-      <div>
-        <h2 className="text-3xl font-black">Ask RepoMind</h2>
+    <div className="grid h-full grid-rows-[auto_minmax(0,1fr)_auto] gap-4 p-4">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-zincLine pb-3">
+        <div>
+          <h2 className="text-3xl font-black">Ask RepoMind</h2>
+          <p className="mt-1 text-sm font-semibold text-ink/58">Grounded repository Q&A with persistent turns and citations.</p>
+        </div>
+        <Badge>{turns.length} turns</Badge>
+      </header>
+
+      <div className="min-h-0 overflow-auto pr-1">
+        {turns.length ? (
+          <div className="space-y-4">
+            {turns.map((turn, index) => (
+              <AskTurnBlock
+                key={turn.id}
+                turn={turn}
+                index={index}
+                repoId={repoId}
+                openCitation={openCitation}
+              />
+            ))}
+            <div ref={endRef} />
+          </div>
+        ) : (
+          <div className="grid h-full min-h-[360px] place-items-center border border-dashed border-zincLine bg-white/55 p-6 text-center">
+            <div className="max-w-xl">
+              <Bot className="mx-auto mb-4 text-basin" size={34} aria-hidden />
+              <h3 className="text-2xl font-black">Start a repository conversation.</h3>
+              <p className="mt-2 text-sm leading-7 text-ink/62">
+                Ask about entrypoints, reading order, modules, data flow, or architecture. Each answer stays in this thread and keeps its citations.
+              </p>
+            </div>
+          </div>
+        )}
       </div>
-      {answer ? (
-        <div className="border border-zincLine bg-white p-4">
-          <p className="leading-7">{answer.answer}</p>
-          <CitationRow citations={answer.citations ?? []} openCitation={openCitation} />
-          <Link href={`/repos/${repoId}/trace/${answer.run_id}`} className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-basin">
+
+      <form
+        className="grid gap-2 border-t border-zincLine pt-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          askRepo();
+        }}
+      >
+        <div className="flex min-h-24 gap-2">
+          <textarea
+            className="focus-ring min-h-24 flex-1 resize-none border border-zincLine bg-white p-3 leading-6"
+            value={question}
+            onChange={(event) => setQuestion(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask a follow-up. Press Enter to send, Shift+Enter for a new line."
+          />
+          <button
+            type="submit"
+            disabled={loading || !question.trim()}
+            className="focus-ring inline-flex w-16 shrink-0 items-center justify-center border border-ink bg-ink text-paper transition hover:bg-signal disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label="Send question"
+          >
+            {loading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function AskTurnBlock({
+  turn,
+  index,
+  repoId,
+  openCitation
+}: {
+  turn: AskTurn;
+  index: number;
+  repoId: string;
+  openCitation: (citation: Citation) => void;
+}) {
+  return (
+    <section className="grid gap-3">
+      <div className="ml-auto max-w-[78%] border border-ink bg-ink px-4 py-3 text-paper">
+        <div className="mb-1 text-xs font-bold uppercase text-paper/55">Question {index + 1}</div>
+        <p className="whitespace-pre-line leading-7">{turn.question}</p>
+      </div>
+
+      <div className="max-w-[88%] border border-zincLine bg-white p-4">
+        <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-ink/52">
+          <Bot size={15} aria-hidden />
+          RepoMind
+        </div>
+        {turn.pending ? (
+          <div className="flex items-center gap-2 text-sm font-bold text-basin">
+            <Loader2 className="animate-spin" size={16} aria-hidden />
+            Reading wiki, graph, symbols, and citations...
+          </div>
+        ) : null}
+        {turn.error ? <p className="leading-7 text-rust">{turn.error}</p> : null}
+        {turn.answer ? <p className="whitespace-pre-line leading-7">{turn.answer}</p> : null}
+        <CitationRow citations={turn.citations} openCitation={openCitation} />
+        {turn.run_id ? (
+          <Link href={`/repos/${repoId}/trace/${turn.run_id}`} className="mt-3 inline-flex items-center gap-2 text-sm font-bold text-basin">
             <Activity size={16} aria-hidden />
             View trace
           </Link>
-        </div>
-      ) : null}
-      <div className="flex gap-2">
-        <textarea
-          className="focus-ring min-h-24 flex-1 border border-zincLine bg-white p-3"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-        />
-        <button onClick={askRepo} disabled={loading} className="focus-ring inline-flex w-16 items-center justify-center border border-ink bg-ink text-paper">
-          {loading ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
-        </button>
+        ) : null}
       </div>
-    </div>
+    </section>
   );
 }
 
