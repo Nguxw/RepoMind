@@ -19,7 +19,7 @@ The MVP is deterministic by default through `MockModelClient`, so it runs withou
 - Store import metadata locally or in PostgreSQL through a SQLAlchemy-backed store.
 - Record normalized rows for repositories, files, symbols, edges, wiki pages, wiki citations, agent runs, and tool calls.
 - Run Wiki generation through a task queue abstraction with inline and Redis/Arq modes.
-- Use in-memory vector retrieval by default, with a Qdrant adapter and Docker service available for later remote vector indexing.
+- Use in-memory vector retrieval by default, with Qdrant and pgvector-style SQL adapters available through configuration.
 - Use a Next.js workbench with Wiki, React Flow Graph, Ask, Evidence, Monaco, Mermaid, and shadcn-style UI components.
 - Expose FastAPI APIs for import, profile, files, symbols, graph, Wiki, source, Ask, and trace access.
 
