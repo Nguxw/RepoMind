@@ -69,6 +69,27 @@ curl -X POST http://localhost:8000/api/repos/import \
 
 ## Local Development
 
+### One-Click Start
+
+On Windows, run this from the repository root:
+
+```bat
+start_repomind.bat
+```
+
+The launcher starts FastAPI and the Next.js workbench, waits for both health checks, opens `http://127.0.0.1:3000/repos/new`, and keeps both services alive until you press `Ctrl+C` in that terminal window. Logs are written to `tmp/repomind_api.log` and `tmp/repomind_web.log`.
+
+Useful variants:
+
+```bat
+start_repomind.bat --no-browser
+start_repomind.bat --mode dev
+start_repomind.bat --smoke --no-browser
+stop_repomind.bat
+```
+
+By default, the launcher uses the stable standalone production server. If `apps/web/.next/standalone/server.js` is missing, it automatically runs a frontend production build first.
+
 Create an environment and install dependencies:
 
 ```bash
