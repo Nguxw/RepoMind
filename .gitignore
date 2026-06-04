@@ -12,6 +12,12 @@ htmlcov/
 
 .venv/
 venv/
+.conda/
+.conda-pkgs/
+.conda-envs/
+.conda-cache/
+.localappdata/
+.appdata/
 node_modules/
 .next/
 apps/web/.next/

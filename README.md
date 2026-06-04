@@ -81,7 +81,9 @@ Run tests:
 python -m pytest
 ```
 
-Run a live LLM smoke test after setting model environment variables:
+RepoMind automatically loads environment variables from the repository-root `.env` file when API, storage, and model clients are created. Keep real API keys in `.env`; the file is ignored by Git.
+
+Run live LLM smoke tests after setting model environment variables in `.env`:
 
 ```bash
 python scripts/live_llm_smoke.py
@@ -110,6 +112,18 @@ cd apps/web
 npm install
 npm run dev
 ```
+
+Build and smoke-test the production frontend:
+
+```bash
+cd apps/web
+npm run build
+cd ../..
+python scripts/frontend_smoke.py
+python scripts/browser_smoke.py
+```
+
+`browser_smoke.py` starts the API and standalone Next server, prepares standalone static assets, opens a local headless browser through Selenium or Chrome DevTools Protocol, and writes screenshots under `tmp/`.
 
 Open the health check:
 
@@ -144,7 +158,7 @@ Demo workflow:
 
 ## Environment Variables
 
-Copy `.env.example` to `.env` when you want local overrides.
+Copy `.env.example` to `.env` when you want local overrides. `.env` is loaded automatically and must not be committed.
 
 ```env
 REPOMIND_DATA_DIR=./data

@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.concurrency import run_in_threadpool
 
+from packages.config import load_env_file
 from apps.api.schemas import (
     FileTreeResponse,
     GenerateWikiResponse,
@@ -34,6 +35,8 @@ from packages.storage import FileRepositoryStore, RepositoryRecord, create_repos
 from packages.tasks import create_task_queue
 
 CloneFunc = Callable[[str, str, int], CloneResult]
+
+load_env_file()
 
 
 def create_app(
