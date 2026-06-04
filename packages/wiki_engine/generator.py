@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from packages.code_intelligence.models import CodeSymbol, RepoGraph
@@ -24,6 +25,7 @@ class WikiGenerator:
         pages: list[WikiPage] = []
         for spec in self.planner.plan(profile):
             page = self._generate_page(spec, profile, file_paths, symbols, graph)
+            page = await self._apply_model_content(page, profile, file_paths, symbols, graph)
             page = self.citation_binder.bind_page(page, profile.local_path, file_paths)
             page.invalid_citation_warnings = self.checker.check_page(page)
             pages.append(page)
@@ -117,6 +119,97 @@ class WikiGenerator:
             diagrams=diagrams,
             related_pages=_related_pages(spec.slug),
         )
+
+    async def _apply_model_content(
+        self,
+        page: WikiPage,
+        profile: RepoProfile,
+        file_paths: list[str],
+        symbols: list[CodeSymbol],
+        graph: RepoGraph,
+    ) -> WikiPage:
+        evidence = {
+            "page": {"title": page.title, "slug": page.slug},
+            "repo": {
+                "name": profile.name,
+                "description": profile.description,
+                "languages": profile.languages,
+                "frameworks": profile.frameworks,
+                "package_managers": profile.package_managers,
+                "entrypoints": profile.entrypoints,
+                "dependency_files": profile.dependency_files,
+                "important_files": profile.important_files[:16],
+                "important_directories": profile.important_directories,
+            },
+            "symbols": [
+                {
+                    "name": symbol.name,
+                    "type": symbol.type,
+                    "file_path": symbol.file_path,
+                    "start_line": symbol.start_line,
+                    "end_line": symbol.end_line,
+                    "signature": symbol.signature,
+                }
+                for symbol in symbols[:40]
+            ],
+            "graph": {
+                "node_count": len(graph.nodes),
+                "edge_count": len(graph.edges),
+                "edge_types": sorted({edge.type for edge in graph.edges}),
+            },
+            "allowed_files": file_paths[:200],
+            "existing_summary": page.summary,
+            "existing_sections": [section.model_dump(mode="json") for section in page.sections],
+        }
+        messages = [
+            {
+                "role": "system",
+                "content": (
+                    "You write concise repository wiki pages. Use only the provided evidence. "
+                    "Do not invent files, functions, classes, commands, dependencies, or citations. "
+                    "Return only valid JSON with keys: summary, sections, related_pages. "
+                    "Each section must have heading and content. Do not include citations."
+                ),
+            },
+            {"role": "user", "content": json.dumps(evidence, ensure_ascii=False)},
+        ]
+        try:
+            payload = await self.model_client.generate_json(messages, schema={})
+        except Exception as exc:
+            page.invalid_citation_warnings.append(f"Model content generation failed for {page.title}: {exc}")
+            return page
+
+        summary = payload.get("summary")
+        if isinstance(summary, str) and summary.strip():
+            page.summary = summary.strip()
+
+        model_sections = payload.get("sections")
+        if isinstance(model_sections, list) and model_sections:
+            merged_sections: list[WikiSection] = []
+            for index, original in enumerate(page.sections):
+                model_section = model_sections[index] if index < len(model_sections) and isinstance(model_sections[index], dict) else {}
+                heading = model_section.get("heading") if isinstance(model_section.get("heading"), str) else original.heading
+                content = model_section.get("content") if isinstance(model_section.get("content"), str) else original.content
+                merged_sections.append(
+                    WikiSection(
+                        heading=heading.strip() or original.heading,
+                        content=content.strip() or original.content,
+                        citations=original.citations,
+                    )
+                )
+            for extra in model_sections[len(page.sections):3]:
+                if not isinstance(extra, dict):
+                    continue
+                heading = extra.get("heading")
+                content = extra.get("content")
+                if isinstance(heading, str) and isinstance(content, str) and heading.strip() and content.strip():
+                    merged_sections.append(WikiSection(heading=heading.strip(), content=content.strip(), citations=page.sections[-1].citations if page.sections else []))
+            page.sections = merged_sections
+
+        related_pages = payload.get("related_pages")
+        if isinstance(related_pages, list):
+            page.related_pages = [str(item) for item in related_pages[:6] if str(item).strip()]
+        return page
 
 
 def _primary_files(profile: RepoProfile, file_paths: list[str]) -> list[str]:

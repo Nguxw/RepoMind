@@ -77,6 +77,13 @@ Run tests:
 python -m pytest
 ```
 
+Run a live LLM smoke test after setting model environment variables:
+
+```bash
+python scripts/live_llm_smoke.py
+python scripts/live_api_smoke.py
+```
+
 Optional Tree-sitter parser support:
 
 ```bash

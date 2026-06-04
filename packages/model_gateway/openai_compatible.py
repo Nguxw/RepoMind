@@ -29,15 +29,18 @@ class OpenAICompatibleClient(BaseModelClient):
         return _extract_content(payload)
 
     async def generate_json(self, messages: list[dict[str, Any]], schema: dict[str, Any]) -> dict[str, Any]:
-        payload = await self._chat_completion(
-            messages,
-            extra={
-                "response_format": {"type": "json_object"},
-            },
-        )
+        try:
+            payload = await self._chat_completion(
+                messages,
+                extra={
+                    "response_format": {"type": "json_object"},
+                },
+            )
+        except httpx.HTTPStatusError:
+            payload = await self._chat_completion(messages)
         content = _extract_content(payload)
         try:
-            return json.loads(content)
+            return json.loads(_strip_json_fences(content))
         except json.JSONDecodeError:
             return {"raw": content}
 
@@ -64,3 +67,15 @@ def _extract_content(payload: dict[str, Any]) -> str:
     if isinstance(content, list):
         return "\n".join(str(part.get("text", part)) for part in content)
     return str(content)
+
+
+def _strip_json_fences(content: str) -> str:
+    stripped = content.strip()
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+    return stripped

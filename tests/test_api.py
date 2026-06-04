@@ -79,3 +79,4 @@ def test_import_profile_and_files_endpoints(tmp_path: Path):
     trace = client.get(f"/api/runs/{ask.json()['run_id']}/trace")
     assert trace.status_code == 200
     assert trace.json()["run"]["steps"]
+    assert any(step["tool"] == "model_call" for step in trace.json()["run"]["steps"])

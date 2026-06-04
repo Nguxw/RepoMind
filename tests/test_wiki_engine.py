@@ -8,6 +8,19 @@ from packages.code_intelligence.symbol_extractor import extract_symbols
 from packages.wiki_engine.generator import WikiGenerator
 
 
+class SpyModelClient(MockModelClient):
+    def __init__(self):
+        self.json_calls = 0
+
+    async def generate_json(self, messages, schema):
+        self.json_calls += 1
+        return {
+            "summary": "Model-authored summary.",
+            "sections": [{"heading": "Model section", "content": "Model-authored content grounded in evidence."}],
+            "related_pages": ["Architecture"],
+        }
+
+
 @pytest.mark.asyncio
 async def test_wiki_generator_creates_default_pages_with_citations(tmp_path):
     (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
@@ -23,3 +36,19 @@ async def test_wiki_generator_creates_default_pages_with_citations(tmp_path):
     assert {"Overview", "Architecture", "Core Modules", "Important Files", "How to Run", "Reading Guide"} <= titles
     assert any(page.diagrams for page in pages)
     assert all(citation.status == "valid" for page in pages for section in page.sections for citation in section.citations)
+
+
+@pytest.mark.asyncio
+async def test_wiki_generator_uses_model_client_for_content(tmp_path):
+    (tmp_path / "README.md").write_text("# Demo\n", encoding="utf-8")
+    (tmp_path / "main.py").write_text("def create_app():\n    return 'ok'\n", encoding="utf-8")
+    scan = scan_repository(tmp_path)
+    profile = build_repo_profile("repo-1", "https://github.com/example/demo.git", tmp_path, scan, "abc123")
+    symbols = extract_symbols(tmp_path, scan.included_files)
+    model = SpyModelClient()
+
+    pages = await WikiGenerator(model).generate(profile, scan.included_files, symbols, RepoGraph(repo_id="repo-1"))
+
+    assert model.json_calls >= 6
+    assert pages[0].summary == "Model-authored summary."
+    assert pages[0].sections[0].heading == "Model section"
