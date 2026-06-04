@@ -185,6 +185,11 @@ Copy `.env.example` to `.env` when you want local overrides. `.env` is loaded au
 REPOMIND_DATA_DIR=./data
 REPOMIND_MAX_FILE_BYTES=1048576
 REPOMIND_CLONE_TIMEOUT_SECONDS=120
+REPOMIND_GIT_CLONE_STRATEGY=auto
+REPOMIND_GITHUB_SSH_FALLBACK=true
+REPOMIND_GIT_PROXY=
+REPOMIND_GIT_SSH_COMMAND=
+REPOMIND_GITHUB_MIRROR=
 REPOMIND_STORAGE=file
 DATABASE_URL=postgresql+psycopg://repomind:repomind@postgres:5432/repomind
 REPOMIND_QUEUE_MODE=inline
@@ -204,6 +209,28 @@ ANTHROPIC_MODEL=claude-sonnet-4-5
 DEEPSEEK_API_KEY=
 DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
 DEEPSEEK_MODEL=deepseek-chat
+```
+
+### GitHub Clone Troubleshooting
+
+If import fails with `Failed to connect to github.com port 443`, the backend machine cannot reach GitHub over HTTPS. RepoMind now retries with GitHub SSH by default. On machines where SSH works better than HTTPS, set this in `.env`:
+
+```env
+REPOMIND_GIT_CLONE_STRATEGY=ssh-first
+```
+
+If your network requires a proxy:
+
+```env
+REPOMIND_GIT_PROXY=http://127.0.0.1:7890
+```
+
+If you use a GitHub mirror, configure a prefix or template:
+
+```env
+REPOMIND_GITHUB_MIRROR=https://gh-proxy.example.com/
+# or
+REPOMIND_GITHUB_MIRROR=https://mirror.example.com/{owner}/{repo}.git
 ```
 
 ## Next Stages
