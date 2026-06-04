@@ -1,8 +1,8 @@
 # RepoMind
 
-RepoMind is a codebase understanding and LLM-Wiki generation platform. This first MVP implements the foundation: a FastAPI backend that imports a public GitHub repository, filters files safely, builds a file tree, and generates a structured `RepoProfile`.
+RepoMind is a codebase understanding and LLM-Wiki generation platform. The current MVP imports a public GitHub repository, filters files safely, builds a file tree, extracts symbols, constructs a minimal RepoKG, generates structured Wiki pages with source citations, answers grounded questions, records agent traces, and exposes a Next.js workbench UI.
 
-This stage intentionally does not include LLM calls, Tree-sitter indexing, Wiki generation, or the frontend. Those modules are scaffolded in the project plan and will build on this ingestion layer.
+The MVP is deterministic by default through `MockModelClient`, so it runs without API keys. Real model providers can be enabled through `ModelGateway`.
 
 ## What Works Now
 
@@ -12,16 +12,27 @@ This stage intentionally does not include LLM calls, Tree-sitter indexing, Wiki 
 - Detect languages, package managers, frameworks, README files, dependency files, config files, entrypoints, tests, important files, and important directories.
 - Extract Python, JavaScript, and TypeScript symbols for classes, functions, methods, imports, and exports.
 - Build a minimal RepoKG with Repository, Directory, File, Config, Dependency, Class, Function, and Method nodes.
+- Generate structured Wiki pages for Overview, Architecture, Core Modules, Important Files, How to Run, and Reading Guide.
+- Validate source citations and expose source file content for citation panels.
+- Ask questions over Wiki pages, symbols, graph evidence, and source snippets.
+- Record trace data for Wiki generation and Ask runs.
+- Use a Next.js workbench with Wiki, Graph, Ask, Evidence, Monaco, and Mermaid panels.
 - Store import metadata locally under `data/metadata`.
-- Expose a small FastAPI API for import/profile/file-tree access.
+- Expose FastAPI APIs for import, profile, files, symbols, graph, Wiki, source, Ask, and trace access.
 
 ## Project Layout
 
 ```text
 apps/
   api/                         FastAPI backend
+  web/                         Next.js workbench frontend
 packages/
   repo_ingestion/              Clone, ignore, scan, detect, profile
+  code_intelligence/           Symbol extraction and RepoKG builder
+  model_gateway/               OpenAI-compatible, OpenAI, Claude, DeepSeek, mock clients
+  wiki_engine/                 Structured Wiki generation, citations, Mermaid
+  retrieval/                   Wiki/symbol/source context packing
+  harness/                     Lightweight AgentRuntime and trace state
   storage/                     Local MVP metadata storage
 tests/                         Unit and API tests
 ```
@@ -35,6 +46,13 @@ GET  /api/repos/{repo_id}/profile
 GET  /api/repos/{repo_id}/files
 GET  /api/repos/{repo_id}/symbols
 GET  /api/repos/{repo_id}/graph
+GET  /api/repos/{repo_id}/source?path=...
+POST /api/repos/{repo_id}/wiki/generate
+GET  /api/repos/{repo_id}/wiki
+GET  /api/repos/{repo_id}/wiki/{page_slug}
+POST /api/repos/{repo_id}/ask
+GET  /api/runs/{run_id}
+GET  /api/runs/{run_id}/trace
 ```
 
 Example import request:
@@ -73,6 +91,14 @@ Start the API:
 uvicorn apps.api.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+Run the frontend when Node/npm is available:
+
+```bash
+cd apps/web
+npm install
+npm run dev
+```
+
 Open the health check:
 
 ```text
@@ -85,11 +111,21 @@ http://127.0.0.1:8000/health
 docker compose up --build
 ```
 
-The API will be available at:
+The app will be available at:
 
 ```text
+http://127.0.0.1:3000
 http://127.0.0.1:8000
 ```
+
+Demo workflow:
+
+1. Open `http://127.0.0.1:3000/repos/new`.
+2. Import a public GitHub repository URL.
+3. Open the generated workbench.
+4. Click `Generate Wiki`.
+5. Open citations in the Evidence panel.
+6. Ask a repository question and inspect the linked trace.
 
 ## Environment Variables
 
@@ -99,11 +135,24 @@ Copy `.env.example` to `.env` when you want local overrides.
 REPOMIND_DATA_DIR=./data
 REPOMIND_MAX_FILE_BYTES=1048576
 REPOMIND_CLONE_TIMEOUT_SECONDS=120
+
+MODEL_PROVIDER=mock
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-5
+
+DEEPSEEK_API_KEY=
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat
 ```
 
 ## Next Stages
 
-1. Add `ModelGateway` with OpenAI-compatible and mock clients.
-2. Implement `WikiEngine` with structured pages, citations, and Mermaid diagrams.
-3. Build the Next.js workbench UI with Wiki, Evidence, Monaco, Mermaid, and Ask panels.
-4. Add persistent PostgreSQL storage for profiles, symbols, graph edges, wiki pages, and traces.
+1. Add PostgreSQL persistence for repositories, files, symbols, graph edges, wiki pages, and traces.
+2. Add a background queue for long imports and Wiki generation.
+3. Replace deterministic Wiki sections with provider-backed generation while retaining citation validation.
+4. Add React Flow graph visualization and richer Mermaid validation.

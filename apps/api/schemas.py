@@ -3,7 +3,9 @@ from __future__ import annotations
 from pydantic import BaseModel, Field
 
 from packages.code_intelligence.models import CodeSymbol, RepoGraph
+from packages.harness.state import AgentRun, AskAnswer
 from packages.repo_ingestion.models import FileNode, RepoProfile
+from packages.wiki_engine.models import WikiPage
 
 
 class ImportRepositoryRequest(BaseModel):
@@ -38,3 +40,38 @@ class SymbolsResponse(BaseModel):
 class RepoGraphResponse(BaseModel):
     repo_id: str
     graph: RepoGraph
+
+
+class GenerateWikiResponse(BaseModel):
+    repo_id: str
+    run_id: str
+    pages: list[WikiPage]
+
+
+class WikiListResponse(BaseModel):
+    repo_id: str
+    pages: list[WikiPage]
+
+
+class WikiPageResponse(BaseModel):
+    repo_id: str
+    page: WikiPage
+
+
+class AskRepositoryRequest(BaseModel):
+    question: str = Field(..., min_length=1)
+
+
+class SourceFileResponse(BaseModel):
+    repo_id: str
+    file_path: str
+    content: str
+    line_count: int
+
+
+class RunResponse(BaseModel):
+    run: AgentRun
+
+
+class AskRepositoryResponse(AskAnswer):
+    pass

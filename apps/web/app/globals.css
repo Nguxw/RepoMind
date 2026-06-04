@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+  --panel: rgba(255, 252, 242, 0.84);
+  --line: #c7c1b3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background:
+    linear-gradient(90deg, rgba(22, 24, 29, 0.05) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(22, 24, 29, 0.04) 1px, transparent 1px),
+    #f4f1e8;
+  background-size: 28px 28px;
+  color: #16181d;
+  font-family: Aptos, "Segoe UI", sans-serif;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  box-shadow: 0 18px 50px rgba(22, 24, 29, 0.08);
+}
+
+.focus-ring:focus-visible {
+  outline: 2px solid #1f8a70;
+  outline-offset: 2px;
+}
+
+.mermaid svg {
+  max-width: 100%;
+}

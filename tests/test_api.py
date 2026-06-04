@@ -51,3 +51,31 @@ def test_import_profile_and_files_endpoints(tmp_path: Path):
     graph_payload = graph.json()["graph"]
     assert any(node["type"] == "Repository" for node in graph_payload["nodes"])
     assert any(edge["type"] == "defines" for edge in graph_payload["edges"])
+
+    source = client.get("/api/repos/repo123/source", params={"path": "main.py"})
+    assert source.status_code == 200
+    assert "class App" in source.json()["content"]
+
+    wiki = client.post("/api/repos/repo123/wiki/generate")
+    assert wiki.status_code == 200
+    assert wiki.json()["run_id"]
+    assert len(wiki.json()["pages"]) >= 6
+
+    wiki_list = client.get("/api/repos/repo123/wiki")
+    assert wiki_list.status_code == 200
+    assert any(page["slug"] == "overview" for page in wiki_list.json()["pages"])
+
+    wiki_page = client.get("/api/repos/repo123/wiki/overview")
+    assert wiki_page.status_code == 200
+    assert wiki_page.json()["page"]["title"] == "Overview"
+
+    escaped_source = client.get("/api/repos/repo123/source", params={"path": "../outside.py"})
+    assert escaped_source.status_code == 400
+
+    ask = client.post("/api/repos/repo123/ask", json={"question": "Where is the app class?"})
+    assert ask.status_code == 200
+    assert ask.json()["citations"]
+
+    trace = client.get(f"/api/runs/{ask.json()['run_id']}/trace")
+    assert trace.status_code == 200
+    assert trace.json()["run"]["steps"]
