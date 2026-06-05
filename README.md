@@ -1,44 +1,259 @@
 # RepoMind
 
-RepoMind is a codebase understanding and LLM-Wiki generation platform. The current MVP imports a public GitHub repository, filters files safely, builds a file tree, extracts symbols, constructs a minimal RepoKG, generates structured Wiki pages with source citations, answers grounded questions, records agent traces, and exposes a Next.js workbench UI.
+<p align="center">
+  <strong>Repository evidence workbench and citation-backed LLM wiki generator.</strong>
+</p>
 
-The MVP is deterministic by default through `MockModelClient`, so it runs without API keys. Real model providers can be enabled through `ModelGateway`.
+<p align="center">
+  <a href="#quick-start"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white"></a>
+  <a href="#api"><img alt="FastAPI" src="https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white"></a>
+  <a href="#web-workbench"><img alt="Next.js" src="https://img.shields.io/badge/Web-Next.js-000000?logo=nextdotjs&logoColor=white"></a>
+  <a href="#docker"><img alt="Docker" src="https://img.shields.io/badge/Deploy-Docker-2496ED?logo=docker&logoColor=white"></a>
+  <a href="#model-providers"><img alt="Mock model by default" src="https://img.shields.io/badge/Model-mock%20by%20default-1f8a70"></a>
+</p>
 
-## What Works Now
+RepoMind turns a GitHub repository into a navigable evidence workspace. It clones a public repository, filters noisy files, builds a repository profile, extracts symbols, creates a lightweight RepoKG, generates structured wiki pages with citations, answers repository questions from grounded context, and records agent traces for inspection.
 
-- Clone a public GitHub repository from a GitHub URL.
-- Ignore noisy or unsafe content such as `.git`, `node_modules`, virtual environments, build outputs, binary files, and large files.
-- Generate a file tree for included files.
+The project runs without external model credentials by default through `MockModelClient`. Real model providers are optional and can be enabled only when valid API keys are configured.
+
+## Contents
+
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quick Start](#quick-start)
+- [Docker](#docker)
+- [Configuration](#configuration)
+- [API](#api)
+- [Development](#development)
+- [Project Layout](#project-layout)
+- [Roadmap](#roadmap)
+- [License](#license)
+
+## Screenshots
+
+### Repository Import
+
+<p align="center">
+  <img src="docs/assets/screenshots/repomind-import.png" alt="RepoMind repository import screen" width="820">
+</p>
+
+### Web Workbench
+
+<p align="center">
+  <img src="docs/assets/screenshots/repomind-overview.png" alt="RepoMind overview workbench" width="100%">
+</p>
+
+### Wiki, Graph, and Trace
+
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/screenshots/repomind-wiki.png" alt="RepoMind generated wiki with citations">
+    </td>
+    <td width="50%">
+      <img src="docs/assets/screenshots/repomind-graph.png" alt="RepoMind repository graph view">
+    </td>
+  </tr>
+  <tr>
+    <td colspan="2">
+      <img src="docs/assets/screenshots/repomind-trace.png" alt="RepoMind agent trace view">
+    </td>
+  </tr>
+</table>
+
+## Features
+
+- Import public GitHub repositories from a repository URL.
+- Ignore unsafe or noisy content such as `.git`, `node_modules`, virtual environments, build outputs, binary files, and oversized files.
 - Detect languages, package managers, frameworks, README files, dependency files, config files, entrypoints, tests, important files, and important directories.
 - Extract Python, JavaScript, and TypeScript symbols for classes, functions, methods, imports, and exports.
-- Build a minimal RepoKG with Repository, Directory, File, Config, Dependency, Class, Function, and Method nodes.
-- Generate structured Wiki pages for Overview, Architecture, Core Modules, Important Files, How to Run, and Reading Guide.
-- Validate source citations and expose source file content for citation panels.
-- Ask questions over Wiki pages, symbols, graph evidence, and source snippets.
-- Record trace data for Wiki generation and Ask runs.
-- Store import metadata locally or in PostgreSQL through a SQLAlchemy-backed store.
-- Record normalized rows for repositories, files, symbols, edges, wiki pages, wiki citations, agent runs, and tool calls.
-- Run Wiki generation through a task queue abstraction with inline and Redis/Arq modes.
-- Use in-memory vector retrieval by default, with Qdrant and pgvector-style SQL adapters available through configuration.
-- Use a Next.js workbench with Wiki, React Flow Graph, Ask, Evidence, Monaco, Mermaid, and shadcn-style UI components.
-- Expose FastAPI APIs for import, profile, files, symbols, graph, Wiki, source, Ask, and trace access.
+- Build a lightweight RepoKG with repository, directory, file, config, dependency, class, function, and method nodes.
+- Generate structured wiki pages for Overview, Architecture, Core Modules, Important Files, How to Run, and Reading Guide.
+- Validate source citations and expose source files in an evidence panel.
+- Ask repository questions over wiki pages, symbols, graph evidence, and source snippets.
+- Record agent runs and tool-call traces for generated wiki and ask workflows.
+- Store metadata locally or in PostgreSQL through SQLAlchemy-backed storage.
+- Run tasks inline for local development or through Redis/Arq for worker-based execution.
+- Use in-memory retrieval by default, with Qdrant and SQL/pgvector-style adapters available by configuration.
+- Provide a Next.js workbench with Wiki, React Flow graph, Ask, Evidence, Monaco, Mermaid, and shadcn-style UI components.
 
-## Project Layout
+## Architecture
+
+```mermaid
+flowchart LR
+    User["User"]
+    Web["Next.js Workbench"]
+    API["FastAPI API"]
+    Ingestion["Repository Ingestion"]
+    Intelligence["Code Intelligence"]
+    Wiki["Wiki Engine"]
+    Retrieval["Retrieval Layer"]
+    Store["File or PostgreSQL Store"]
+    Model["Model Gateway"]
+    Queue["Inline or Redis/Arq Queue"]
+
+    User --> Web
+    Web --> API
+    API --> Ingestion
+    Ingestion --> Intelligence
+    Intelligence --> Store
+    API --> Queue
+    Queue --> Wiki
+    Wiki --> Retrieval
+    Retrieval --> Store
+    Wiki --> Model
+    API --> Store
+```
+
+RepoMind keeps the local development path intentionally small: file storage, inline jobs, in-memory retrieval, and mock model output are enough to run the full workflow without external infrastructure. PostgreSQL, Redis, Qdrant, and live model providers can be switched on as the deployment matures.
+
+## Quick Start
+
+### Windows One-Click Start
+
+From the repository root:
+
+```bat
+start_repomind.bat
+```
+
+The launcher starts FastAPI and the Next.js workbench, waits for both health checks, opens `http://127.0.0.1:3000/repos/new`, and keeps both services alive until you press `Ctrl+C`.
+
+Useful variants:
+
+```bat
+start_repomind.bat --no-browser
+start_repomind.bat --mode dev
+start_repomind.bat --smoke --no-browser
+stop_repomind.bat
+```
+
+Logs are written to `tmp/repomind_api.log` and `tmp/repomind_web.log`.
+
+### Manual Local Setup
+
+Install Python dependencies:
+
+```bash
+python -m pip install -e ".[dev]"
+```
+
+Install frontend dependencies:
+
+```bash
+cd apps/web
+npm install
+cd ../..
+```
+
+Start the API:
+
+```bash
+uvicorn apps.api.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+Start the frontend:
+
+```bash
+cd apps/web
+npm run dev
+```
+
+Open:
 
 ```text
-apps/
-  api/                         FastAPI backend
-  web/                         Next.js workbench frontend
-packages/
-  repo_ingestion/              Clone, ignore, scan, detect, profile
-  code_intelligence/           Symbol extraction and RepoKG builder
-  model_gateway/               OpenAI-compatible, OpenAI, Claude, DeepSeek, mock clients
-  wiki_engine/                 Structured Wiki generation, citations, Mermaid
-  retrieval/                   Wiki/symbol/source context packing
-  harness/                     Lightweight AgentRuntime and trace state
-  storage/                     File and SQLAlchemy/PostgreSQL metadata storage
-  tasks/                       Inline and Redis/Arq queue adapters
-tests/                         Unit and API tests
+http://127.0.0.1:3000/repos/new
+```
+
+## Docker
+
+```bash
+docker compose up --build
+```
+
+Services:
+
+```text
+Web:      http://127.0.0.1:3000
+API:      http://127.0.0.1:8000
+Postgres: postgres://127.0.0.1:5432
+Redis:    redis://127.0.0.1:6379
+Qdrant:   http://127.0.0.1:6333
+```
+
+The Docker stack includes Postgres, Redis, Qdrant, the FastAPI service, a worker service, and the Next.js web app.
+
+## Configuration
+
+Copy `.env.example` to `.env` for local overrides:
+
+```bash
+cp .env.example .env
+```
+
+RepoMind automatically loads `.env` from the repository root. Keep real API keys in `.env`; the file is ignored by Git.
+
+### Core Settings
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `REPOMIND_DATA_DIR` | `./data` | Local repository and metadata directory. |
+| `REPOMIND_STORAGE` | `file` | `file` for local JSON metadata, `postgres` for SQL storage. |
+| `REPOMIND_QUEUE_MODE` | `inline` | `inline` for local jobs, `arq` for Redis/Arq workers. |
+| `REPOMIND_VECTOR_STORE` | `memory` | Retrieval backend. `memory` is the default local mode. |
+| `NEXT_PUBLIC_API_BASE_URL` | `http://127.0.0.1:8000` | API base URL used by the frontend. |
+| `MODEL_PROVIDER` | `mock` | Model provider. Use `mock` when API keys are missing or expired. |
+
+### Model Providers
+
+RepoMind supports these provider values:
+
+```env
+MODEL_PROVIDER=mock
+MODEL_PROVIDER=openai
+MODEL_PROVIDER=openai_compatible
+MODEL_PROVIDER=claude
+MODEL_PROVIDER=deepseek
+```
+
+`mock` mode is deterministic and does not call any external model API. Use it for local development, screenshots, CI smoke tests, and offline demos.
+
+For live model calls, configure the matching key and model fields:
+
+```env
+OPENAI_API_KEY=
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4.1-mini
+
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=claude-sonnet-4-5
+
+DEEPSEEK_API_KEY=
+DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
+DEEPSEEK_MODEL=deepseek-chat
+```
+
+### GitHub Clone Troubleshooting
+
+If import fails with a GitHub HTTPS connection error, try SSH-first cloning:
+
+```env
+REPOMIND_GIT_CLONE_STRATEGY=ssh-first
+```
+
+If your network requires a proxy:
+
+```env
+REPOMIND_GIT_PROXY=http://127.0.0.1:7890
+```
+
+If you use a GitHub mirror:
+
+```env
+REPOMIND_GITHUB_MIRROR=https://gh-proxy.example.com/
+# or
+REPOMIND_GITHUB_MIRROR=https://mirror.example.com/{owner}/{repo}.git
 ```
 
 ## API
@@ -62,39 +277,18 @@ GET  /api/runs/{run_id}/trace
 Example import request:
 
 ```bash
-curl -X POST http://localhost:8000/api/repos/import \
+curl -X POST http://127.0.0.1:8000/api/repos/import \
   -H "Content-Type: application/json" \
   -d "{\"url\":\"https://github.com/pallets/flask\"}"
 ```
 
-## Local Development
-
-### One-Click Start
-
-On Windows, run this from the repository root:
-
-```bat
-start_repomind.bat
-```
-
-The launcher starts FastAPI and the Next.js workbench, waits for both health checks, opens `http://127.0.0.1:3000/repos/new`, and keeps both services alive until you press `Ctrl+C` in that terminal window. Logs are written to `tmp/repomind_api.log` and `tmp/repomind_web.log`.
-
-Useful variants:
-
-```bat
-start_repomind.bat --no-browser
-start_repomind.bat --mode dev
-start_repomind.bat --smoke --no-browser
-stop_repomind.bat
-```
-
-By default, the launcher uses the stable standalone production server. If `apps/web/.next/standalone/server.js` is missing, it automatically runs a frontend production build first.
-
-Create an environment and install dependencies:
+Example health check:
 
 ```bash
-python -m pip install -e ".[dev]"
+curl http://127.0.0.1:8000/health
 ```
+
+## Development
 
 Run tests:
 
@@ -102,37 +296,13 @@ Run tests:
 python -m pytest
 ```
 
-RepoMind automatically loads environment variables from the repository-root `.env` file when API, storage, and model clients are created. Keep real API keys in `.env`; the file is ignored by Git.
-
-Run live LLM smoke tests after setting model environment variables in `.env`:
-
-```bash
-python scripts/live_llm_smoke.py
-python scripts/live_api_smoke.py
-python scripts/tree_sitter_smoke.py
-```
-
-Optional Tree-sitter parser support:
+Install optional Tree-sitter parser support:
 
 ```bash
 python -m pip install -e ".[parser]"
 ```
 
-The symbol extractor will use Tree-sitter when language parsers are installed. Without them, the MVP falls back to Python AST and lightweight JavaScript/TypeScript parsing so the ingestion workflow remains runnable.
-
-Start the API:
-
-```bash
-uvicorn apps.api.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Run the frontend when Node/npm is available:
-
-```bash
-cd apps/web
-npm install
-npm run dev
-```
+Without Tree-sitter parsers, RepoMind falls back to Python AST and lightweight JavaScript/TypeScript parsing so ingestion remains runnable.
 
 Build and smoke-test the production frontend:
 
@@ -144,98 +314,55 @@ python scripts/frontend_smoke.py
 python scripts/browser_smoke.py
 ```
 
-`browser_smoke.py` starts the API and standalone Next server, prepares standalone static assets, opens a local headless browser through Selenium or Chrome DevTools Protocol, and writes screenshots under `tmp/`.
-
-Open the health check:
-
-```text
-http://127.0.0.1:8000/health
-```
-
-## Docker
+Run live model smoke tests only after valid provider credentials are set:
 
 ```bash
-docker compose up --build
+python scripts/live_llm_smoke.py
+python scripts/live_api_smoke.py
+python scripts/tree_sitter_smoke.py
 ```
 
-The app will be available at:
+## Project Layout
 
 ```text
-http://127.0.0.1:3000
-http://127.0.0.1:8000
-postgres://127.0.0.1:5432
-redis://127.0.0.1:6379
-http://127.0.0.1:6333
+apps/
+  api/                         FastAPI backend
+  web/                         Next.js workbench frontend
+packages/
+  repo_ingestion/              Clone, ignore, scan, detect, profile
+  code_intelligence/           Symbol extraction and RepoKG builder
+  model_gateway/               OpenAI-compatible, OpenAI, Claude, DeepSeek, mock clients
+  wiki_engine/                 Structured wiki generation, citations, Mermaid
+  retrieval/                   Wiki, symbol, and source context packing
+  harness/                     Agent runtime and trace state
+  storage/                     File and SQLAlchemy/PostgreSQL metadata storage
+  tasks/                       Inline and Redis/Arq queue adapters
+scripts/                       Startup, smoke test, and runtime helper scripts
+tests/                         Unit and API tests
+docs/assets/screenshots/       README screenshots and visual assets
 ```
 
-Demo workflow:
+## Roadmap
 
-1. Open `http://127.0.0.1:3000/repos/new`.
-2. Import a public GitHub repository URL.
-3. Open the generated workbench.
-4. Click `Generate Wiki`.
-5. Open citations in the Evidence panel.
-6. Ask a repository question and inspect the linked trace.
+- Move long-running import and wiki jobs fully to durable Redis/Arq background execution with polling-first UI.
+- Enable production embeddings and remote Qdrant writes.
+- Add richer Mermaid validation and graph layout controls.
+- Add authentication and private repository import.
+- Add repository comparison and change-aware wiki refresh.
+- Add first-class contribution guidelines and release automation.
 
-## Environment Variables
+## Contributing
 
-Copy `.env.example` to `.env` when you want local overrides. `.env` is loaded automatically and must not be committed.
+Issues and pull requests are welcome. Before opening a large change, start with a focused issue that describes the repository workflow, API surface, or UI behavior you want to improve.
 
-```env
-REPOMIND_DATA_DIR=./data
-REPOMIND_MAX_FILE_BYTES=1048576
-REPOMIND_CLONE_TIMEOUT_SECONDS=120
-REPOMIND_GIT_CLONE_STRATEGY=auto
-REPOMIND_GITHUB_SSH_FALLBACK=true
-REPOMIND_GIT_PROXY=
-REPOMIND_GIT_SSH_COMMAND=
-REPOMIND_GITHUB_MIRROR=
-REPOMIND_STORAGE=file
-DATABASE_URL=postgresql+psycopg://repomind:repomind@postgres:5432/repomind
-REPOMIND_QUEUE_MODE=inline
-REDIS_URL=redis://redis:6379/0
-REPOMIND_VECTOR_STORE=memory
-QDRANT_URL=http://qdrant:6333
+Recommended local checks before a pull request:
 
-MODEL_PROVIDER=mock
-NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
-OPENAI_API_KEY=
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_MODEL=gpt-4.1-mini
-
-ANTHROPIC_API_KEY=
-ANTHROPIC_MODEL=claude-sonnet-4-5
-
-DEEPSEEK_API_KEY=
-DEEPSEEK_BASE_URL=https://api.deepseek.com/v1
-DEEPSEEK_MODEL=deepseek-chat
+```bash
+python -m pytest
+cd apps/web
+npm run build
 ```
 
-### GitHub Clone Troubleshooting
+## License
 
-If import fails with `Failed to connect to github.com port 443`, the backend machine cannot reach GitHub over HTTPS. RepoMind now retries with GitHub SSH by default. On machines where SSH works better than HTTPS, set this in `.env`:
-
-```env
-REPOMIND_GIT_CLONE_STRATEGY=ssh-first
-```
-
-If your network requires a proxy:
-
-```env
-REPOMIND_GIT_PROXY=http://127.0.0.1:7890
-```
-
-If you use a GitHub mirror, configure a prefix or template:
-
-```env
-REPOMIND_GITHUB_MIRROR=https://gh-proxy.example.com/
-# or
-REPOMIND_GITHUB_MIRROR=https://mirror.example.com/{owner}/{repo}.git
-```
-
-## Next Stages
-
-1. Move long-running import/wiki jobs fully to durable Redis/Arq background execution with polling-first UI.
-2. Enable remote Qdrant writes with production embeddings.
-3. Add richer Mermaid validation and graph layout controls.
-4. Add authentication and private repository import.
+This repository does not include a license file yet. Add a `LICENSE` file before publishing or accepting external contributions as an open-source project.
