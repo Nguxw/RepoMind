@@ -1,4 +1,4 @@
-# RepoMind
+<h1 align="center">RepoMind</h1>
 
 <p align="center">
   <a href="README.md">English</a> | <a href="README.zh-CN.md">简体中文</a>
