@@ -1,13 +1,17 @@
 # RepoMind
 
 <p align="center">
+  <a href="README.md">English</a> | <a href="README.zh-CN.md">简体中文</a>
+</p>
+
+<p align="center">
   <strong>Repository evidence workbench and citation-backed LLM wiki generator.</strong>
 </p>
 
 <p align="center">
   <a href="#quick-start"><img alt="Python 3.10+" src="https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white"></a>
   <a href="#api"><img alt="FastAPI" src="https://img.shields.io/badge/API-FastAPI-009688?logo=fastapi&logoColor=white"></a>
-  <a href="#web-workbench"><img alt="Next.js" src="https://img.shields.io/badge/Web-Next.js-000000?logo=nextdotjs&logoColor=white"></a>
+  <a href="#screenshots"><img alt="Next.js" src="https://img.shields.io/badge/Web-Next.js-000000?logo=nextdotjs&logoColor=white"></a>
   <a href="#docker"><img alt="Docker" src="https://img.shields.io/badge/Deploy-Docker-2496ED?logo=docker&logoColor=white"></a>
   <a href="#model-providers"><img alt="Mock model by default" src="https://img.shields.io/badge/Model-mock%20by%20default-1f8a70"></a>
 </p>
