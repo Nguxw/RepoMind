@@ -369,4 +369,4 @@ npm run build
 
 ## License
 
-This repository does not include a license file yet. Add a `LICENSE` file before publishing or accepting external contributions as an open-source project.
+RepoMind is released under the [MIT License](LICENSE).

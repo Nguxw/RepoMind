@@ -369,4 +369,4 @@ npm run build
 
 ## 许可证
 
-该仓库目前还没有包含许可证文件。正式作为开源项目发布或接受外部贡献前，请先添加 `LICENSE` 文件。
+RepoMind 基于 [MIT License](LICENSE) 发布。
